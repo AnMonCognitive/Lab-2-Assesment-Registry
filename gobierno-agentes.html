@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gobierno de Agentes</title>
+<style>
+/* Layout: chat del usuario a la izquierda, consola de gobierno a la derecha (eventos, métricas, registry, auditoría) */
+:root{
+  --bg:#F4F2EE; --surface:#FFFFFF; --sunk:#EEEBE5; --line:#DDD8CF;
+  --ink:#151B28; --muted:#5E6472; --accent:#B4461A; --blue:#2257A3;
+  --ok:#2E7D4F; --ok-bg:#E3F1E8; --warn:#9A6312; --warn-bg:#F7EBD3; --crit:#B42318; --crit-bg:#F8E1DE; --info-bg:#E2EAF6;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SFMono-Regular",Consolas,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12151C; --surface:#1A1E27; --sunk:#151820; --line:#2C323E;
+  --ink:#ECE8E1; --muted:#9BA1AE; --accent:#E58157; --blue:#7EA6E6;
+  --ok:#66C792; --ok-bg:#183326; --warn:#E3AE57; --warn-bg:#352812; --crit:#F27A6E; --crit-bg:#3A1A18; --info-bg:#1A2740;
+  color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+.wrap{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:18px 40px;display:grid;gap:14px}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}
+h2{font-size:15px;margin:0}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono);font-size:12px}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+header{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap}
+.hbtns{display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 11px;font-size:13px}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.danger{color:var(--crit)}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px;align-items:start}
+@media (max-width:980px){.main{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:10px;min-width:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+label.f{display:grid;gap:3px;font-size:12px;color:var(--muted)}
+select,input[type=text]{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:6px 8px;min-width:0}
+.chat{height:440px;overflow-y:auto;background:var(--sunk);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:88%;padding:8px 11px;border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.user{align-self:flex-end;background:var(--blue);color:#fff}
+.msg.agent{align-self:flex-start;background:var(--surface);border:1px solid var(--line)}
+.msg.sys{align-self:center;font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:center}
+.msg.gw{align-self:flex-end;font-size:12px;color:var(--warn);background:var(--warn-bg);border-radius:6px;padding:4px 8px}
+.msg.block{align-self:center;font-size:12.5px;color:var(--crit);background:var(--crit-bg);border-radius:6px}
+.card{align-self:flex-start;border:1px dashed var(--accent);background:var(--surface);border-radius:10px;padding:10px 12px;display:grid;gap:8px;max-width:88%}
+.composer{display:flex;gap:8px}
+.composer input{flex:1}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:3px 10px;font-size:12px}
+.chip:hover{border-color:var(--ink)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{border:0;background:none;padding:8px 12px;border-bottom:2px solid transparent;color:var(--muted);font-weight:500;white-space:nowrap}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.tablewrap{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:620px}
+th{position:sticky;top:0;background:var(--sunk);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:7px 9px;border-bottom:1px solid var(--line)}
+td{padding:6px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--sunk)}
+tbody tr.sel{background:var(--info-bg)}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;white-space:nowrap}
+.p-ok{background:var(--ok-bg);color:var(--ok)} .p-warn{background:var(--warn-bg);color:var(--warn)}
+.p-crit{background:var(--crit-bg);color:var(--crit)} .p-info{background:var(--info-bg);color:var(--blue)} .p-mute{background:var(--sunk);color:var(--muted)}
+pre.json{margin:0;background:var(--sunk);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px;overflow:auto;max-height:240px;white-space:pre}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted)}
+textarea{width:100%;min-height:360px;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:10px;font-family:var(--mono);font-size:12px}
+.note{font-size:12.5px;color:var(--muted)}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;max-width:calc(100% - 32px)}
+.access{border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.access input{flex:1;min-width:180px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <span class="eyebrow">Lab 2 · Prototipo local</span>
+      <h1>Gobierno de interacciones usuario–agente</h1>
+      <p class="muted" style="margin:2px 0 0">Todo pasa por la capa de gobierno antes de llegar al agente. Los datos se guardan solo en este navegador.</p>
+    </div>
+    <div class="hbtns">
+      <button class="btn" id="btnExport" type="button">Descargar datos (JSON)</button>
+      <button class="btn" id="btnPurga" type="button">Simular purga a +61 días</button>
+      <button class="btn danger" id="btnReset" type="button">Borrar todo</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- ================= CHAT ================= -->
+    <section class="panel">
+      <div class="row">
+        <label class="f">Agente<select id="selAgente"></select></label>
+        <label class="f">Usuario (se seudonimiza)<input type="text" id="inUsuario" value="ana.lopez@cliente.com"></label>
+        <label class="f">Canal<select id="selCanal"><option>web</option><option>whatsapp</option><option>app</option><option>slack</option></select></label>
+      </div>
+      <div class="chat" id="chat" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form class="composer" id="form">
+        <input type="text" id="inMsg" placeholder="Escribe como si fueras el usuario…" autocomplete="off">
+        <button class="btn primary" type="submit">Enviar</button>
+      </form>
+      <div class="row">
+        <button class="btn" type="button" id="btnFinPos">Terminar sesión 👍</button>
+        <button class="btn" type="button" id="btnFinNeg">Terminar sesión 👎</button>
+        <span class="note" id="sesInfo"></span>
+      </div>
+    </section>
+
+    <!-- ================= CONSOLA ================= -->
+    <section class="panel">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="eventos" type="button">Eventos</button>
+        <button role="tab" aria-selected="false" data-tab="metricas" type="button">Métricas</button>
+        <button role="tab" aria-selected="false" data-tab="registry" type="button">Registry</button>
+        <button role="tab" aria-selected="false" data-tab="auditoria" type="button">Auditoría</button>
+      </div>
+
+      <div data-panel="eventos" class="panel" style="border:0;padding:0">
+        <div class="row">
+          <label class="f">Capa<select id="selCapa"><option value="todas">Telemetría + métricas</option><option value="telemetria">Telemetría</option><option value="metrica">Métricas</option><option value="contenido">Contenido (restringido)</option></select></label>
+          <span class="note" id="evCount"></span>
+        </div>
+        <div class="access" id="accessBox" hidden>
+          <label class="f">Rol<select id="selRol"><option>seguridad</option><option>dueno_agente</option><option>marketing</option><option>soporte</option></select></label>
+          <label class="f" style="flex:1">Justificación (mín. 10 caracteres)<input type="text" id="inJust" placeholder="Ej. Investigación del incidente INC-2291"></label>
+          <button class="btn primary" id="btnAcceso" type="button">Solicitar acceso</button>
+        </div>
+        <div class="tablewrap"><table><thead><tr><th>Hora</th><th>Evento</th><th>Agente</th><th>Capa</th><th>Política</th><th>Detalle</th></tr></thead><tbody id="evBody"></tbody></table></div>
+        <pre class="json" id="evJson">Haz clic en un evento para ver el registro completo.</pre>
+      </div>
+
+      <div data-panel="metricas" hidden class="panel" style="border:0;padding:0">
+        <div class="row"><label class="f">Agente<select id="selMetAg"></select></label></div>
+        <div class="kpis" id="kpis"></div>
+        <p class="note">Se calculan solo con telemetría y métricas. Nunca leen el texto de las conversaciones.</p>
+        <div class="tablewrap"><table><thead><tr><th>Métrica</th><th>Definición oficial</th></tr></thead><tbody id="defs"></tbody></table></div>
+      </div>
+
+      <div data-panel="registry" hidden class="panel" style="border:0;padding:0">
+        <p class="note">Ficha de cada agente: estado, retención, quién puede leer conversaciones, qué datos sensibles se enmascaran o bloquean, y la matriz de permisos. Lo que no está en <span class="mono">acciones</span> está prohibido. Edita y guarda: el cambio aplica al siguiente mensaje.</p>
+        <textarea id="regText" spellcheck="false"></textarea>
+        <div class="row"><button class="btn primary" id="btnRegSave" type="button">Guardar registry</button><button class="btn" id="btnRegReset" type="button">Restaurar ejemplo</button><span class="note" id="regMsg"></span></div>
+      </div>
+
+      <div data-panel="auditoria" hidden class="panel" style="border:0;padding:0">
+        <p class="note">Acciones con efecto real y accesos al contenido. Cada registro incluye el hash del anterior: si alguien edita uno, la cadena se rompe.</p>
+        <div class="row"><button class="btn primary" id="btnVerif" type="button">Verificar cadena</button><button class="btn danger" id="btnAlterar" type="button">Simular alteración</button><span id="verifMsg" class="note"></span></div>
+        <div class="tablewrap"><table><thead><tr><th>#</th><th>Hora</th><th>Evento</th><th>Detalle</th><th>Hash previo</th><th>Hash</th></tr></thead><tbody id="audBody"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+
+/* ======================= Registry de ejemplo ======================= */
+const REGISTRY_EJEMPLO={
+  "AG-001":{
+    "nombre":"Asistente de Soporte","dueno":"Customer Success · L. Ramírez","modelo":"claude-sonnet-5-5","version":"v2.3",
+    "estado":"activo","riesgo":"alto",
+    "retencion_dias":{"contenido":60,"telemetria":395},
+    "acceso_contenido":["seguridad","dueno_agente"],
+    "pii":{"bloquear":["api_key"],"enmascarar":["tarjeta","email","telefono","curp"]},
+    "acciones":{
+      "consultar_pedido":[{"modo":"autonomo"}],
+      "consultar_cargos":[{"modo":"autonomo"}],
+      "reembolso":[{"si":"monto <= 500","modo":"confirmacion"},{"modo":"prohibido","motivo":"limite_permiso"}],
+      "borrar_cliente":[{"modo":"prohibido","motivo":"accion_irreversible"}]
+    }
+  },
+  "AG-004":{
+    "nombre":"Asistente de RR. HH.","dueno":"Personas · D. Fuentes","modelo":"claude-sonnet-5-5","version":"v1.4",
+    "estado":"en_revision","riesgo":"alto",
+    "retencion_dias":{"contenido":30,"telemetria":395},
+    "acceso_contenido":["seguridad"],
+    "pii":{"bloquear":["api_key"],"enmascarar":["email","telefono","curp"]},
+    "acciones":{"consultar_politica":[{"modo":"autonomo"}]}
+  }
+};
+const AGENTE_NO_REGISTRADO="AG-009";
+
+/* ======================= Almacenamiento local ======================= */
+const LS={
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+let registry=LS.get("gob_registry",structuredClone(REGISTRY_EJEMPLO));
+let eventos=LS.get("gob_eventos",[]);
+let auditoria=LS.get("gob_auditoria",[]);
+const guardar=()=>{LS.set("gob_eventos",eventos);LS.set("gob_auditoria",auditoria);};
+
+/* ======================= Utilidades ======================= */
+// Hash FNV-1a de 64 bits (dos semillas de 32). Suficiente para el prototipo; en producción usar SHA-256.
+function fnv(str,seed){let h=seed>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h.toString(16).padStart(8,"0");}
+const hash=s=>fnv(s,2166136261)+fnv(s,0x9747b28c);
+const SECRETO="cambiar-en-produccion";
+const seudonimo=uid=>"u_"+hash(SECRETO+uid.trim().toLowerCase()).slice(0,12);
+const hora=iso=>new Date(iso).toLocaleTimeString("es-MX",{hour12:false});
+function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>el.hidden=true,2600);}
+
+/* ======================= Detección de PII ======================= */
+function luhn(d){let s=0,dbl=false;for(let i=d.length-1;i>=0;i--){let n=+d[i];if(dbl){n*=2;if(n>9)n-=9;}s+=n;dbl=!dbl;}return s%10===0;}
+const DETECTORES=[
+  ["api_key",/\b(?:sk-[A-Za-z0-9_\-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,})\b/g,()=>"[CLAVE]"],
+  ["tarjeta",/\b(?:\d[ \-]?){12,18}\d\b/g,m=>{const d=m.replace(/\D/g,"");return d.length>=13&&d.length<=19&&luhn(d)?"•••• •••• •••• "+d.slice(-4):null;}],
+  ["email",/\b[\w.+\-]+@[\w\-]+\.[\w.\-]+\b/g,()=>"[EMAIL]"],
+  ["curp",/\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b/g,()=>"[CURP]"],
+  ["telefono",/(?<!\d)(?:\+?52[ \-]?)?\d{2,3}[ \-]?\d{3,4}[ \-]?\d{4}(?!\d)/g,()=>"[TELÉFONO]"],
+];
+function escanear(texto,pii){
+  const enm=pii.enmascarar||[],bloq=pii.bloquear||[];let tipos=new Set(),bloqueado=false,out=texto;
+  for(const [tipo,re,f] of DETECTORES){
+    if(!enm.includes(tipo)&&!bloq.includes(tipo))continue;
+    out=out.replace(re,m=>{const r=f(m);if(r===null)return m;tipos.add(tipo);if(bloq.includes(tipo))bloqueado=true;return r;});
+  }
+  return {texto:out,tipos:[...tipos],bloqueado};
+}
+
+/* ======================= Matriz de permisos ======================= */
+const OPS={"<=":(a,b)=>a<=b,">=":(a,b)=>a>=b,"==":(a,b)=>a==b,"!=":(a,b)=>a!=b,"<":(a,b)=>a<b,">":(a,b)=>a>b};
+function cumple(cond,args){
+  return cond.split(" y ").every(p=>{
+    const m=p.match(/^\s*(\w+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$/);if(!m)return false;
+    let [,campo,op,val]=m;if(!(campo in args))return false;
+    val=val.replace(/^['"]|['"]$/g,"");const num=parseFloat(val);
+    return isNaN(num)?OPS[op](String(args[campo]),val):OPS[op](parseFloat(args[campo]),num);
+  });
+}
+function evaluar(ficha,accion,args){
+  const reglas=(ficha.acciones||{})[accion];
+  if(!reglas||!reglas.length)return {modo:"prohibido",motivo:"accion_no_registrada",regla:"denegar por defecto"};
+  for(let i=0;i<reglas.length;i++){const r=reglas[i];if(!r.si||cumple(r.si,args))return {modo:r.modo,motivo:r.motivo||"",regla:`${accion}[${i}]`+(r.si?` si ${r.si}`:"")};}
+  return {modo:"prohibido",motivo:"ninguna_regla_aplica",regla:"denegar por defecto"};
+}
+
+/* ======================= Backend simulado ======================= */
+let folio=22917;
+const BACKEND={
+  consultar_pedido:({numero})=>numero==="48213"?{estado:"en tránsito",origen:"Monterrey",entrega:"jueves 8 de octubre"}:{estado:"no encontrado"},
+  consultar_cargos:()=>({cargos:[{fecha:"2 de octubre",monto:320,duplicado:true}]}),
+  reembolso:({monto})=>({folio:"RF-"+(folio++),monto,dias_habiles:"3 a 5"}),
+  borrar_cliente:({cliente})=>({borrado:cliente}),
+  consultar_politica:()=>({texto:"Política de vacaciones 2026"}),
+};
+
+/* ======================= Registro de eventos ======================= */
+let sesion=null;
+const pendientes={};
+function registrar(ctx,evento,capa,datos,politica="na"){
+  const ts=new Date();const n=eventos.length?parseInt(eventos[eventos.length-1].id_evento.slice(3))+1:1;
+  const dias=ctx.ficha&&ctx.ficha.retencion_dias?ctx.ficha.retencion_dias[capa==="contenido"?"contenido":"telemetria"]:395;
+  const ev={id_evento:"ev_"+String(n).padStart(6,"0"),ts:ts.toISOString(),sesion:ctx.sesion||"—",usuario:ctx.usuario,
+    agente:ctx.agente,version_agente:ctx.ficha?ctx.ficha.version:"—",modelo:ctx.ficha?ctx.ficha.modelo:"—",
+    evento,capa,politica,datos,expira:dias?new Date(ts.getTime()+dias*864e5).toISOString():null};
+  eventos.push(ev);guardar();renderEventos();renderMetricas();return ev;
+}
+function auditar(ev){
+  const previo=auditoria.length?auditoria[auditoria.length-1].hash:"0".repeat(16);
+  const reg={id_evento:ev.id_evento,ts:ev.ts,agente:ev.agente,sesion:ev.sesion,evento:ev.evento,datos:ev.datos,hash_previo:previo};
+  reg.hash=hash(previo+JSON.stringify([reg.id_evento,reg.ts,reg.agente,reg.sesion,reg.evento,reg.datos]));
+  auditoria.push(reg);guardar();renderAuditoria();
+}
+function verificar(){
+  let previo="0".repeat(16);
+  for(let i=0;i<auditoria.length;i++){const r=auditoria[i];
+    const h=hash(previo+JSON.stringify([r.id_evento,r.ts,r.agente,r.sesion,r.evento,r.datos]));
+    if(r.hash_previo!==previo||r.hash!==h)return {ok:false,en:i+1};previo=r.hash;}
+  return {ok:true,n:auditoria.length};
+}
+
+/* ======================= Herramientas con permisos ======================= */
+function herramientas(ctx,ui){
+  return {usar(nombre,args={}){
+    const d=evaluar(ctx.ficha,nombre,args);const base={accion:nombre,args,regla:d.regla};
+    if(d.modo==="autonomo"){
+      const datos=BACKEND[nombre]?BACKEND[nombre](args):{};
+      auditar(registrar(ctx,"herramienta.llamada","telemetria",base,"permitido"));
+      ui.push(["sys",`herramienta: ${nombre}(${JSON.stringify(args)}) · autónomo`]);
+      return {estado:"ok",datos};
+    }
+    if(d.modo==="confirmacion"){
+      const id="acc_"+Date.now().toString(36);
+      pendientes[id]={ctx,accion:nombre,args};
+      auditar(registrar(ctx,"accion.propuesta","telemetria",{...base,id_accion:id,requiere:"confirmacion_del_usuario"},"intervenido"));
+      ui.pendiente={id,accion:nombre,args};
+      return {estado:"pendiente",id};
+    }
+    auditar(registrar(ctx,"accion.bloqueada","telemetria",{...base,motivo:d.motivo},"bloqueado"));
+    ui.push(["block",`Política: ${nombre} ${JSON.stringify(args)} está prohibido (${d.motivo}).`]);
+    return {estado:"bloqueado",motivo:d.motivo};
+  }};
+}
+
+/* ======================= Agente simulado ======================= */
+// Determinista para la demo. Un agente real (Claude) cumpliría el mismo contrato: solo actúa vía herramientas.usar().
+function agente(mensaje,historial,h){
+  const t=mensaje.toLowerCase();
+  const mm=mensaje.match(/\$\s?([\d,]+(?:\.\d+)?)/);const monto=mm?parseFloat(mm[1].replace(/,/g,"")):null;
+  const previo=historial.length?historial[historial.length-1].texto.toLowerCase():"";
+  const num=mensaje.match(/\b(\d{4,6})\b/);
+  if(t.includes("pedido")&&!t.includes("direcci")&&num){
+    const r=h.usar("consultar_pedido",{numero:num[1]});
+    if(r.estado==="ok"&&r.datos.estado!=="no encontrado")
+      return {texto:`Tu pedido ${num[1]} está ${r.datos.estado} desde ${r.datos.origen} y llega el ${r.datos.entrega}.`,intencion:"estado_pedido",confianza:.94,resuelto:true};
+    if(r.estado==="ok")return {texto:`No encuentro el pedido ${num[1]}. ¿Puedes revisar el número?`,intencion:"estado_pedido",confianza:.7,aclaracion:true};
+  }
+  if(t.includes("doble")||t.includes("cargo")){
+    h.usar("consultar_cargos");
+    const r=h.usar("reembolso",{monto:320,motivo:"cargo duplicado"});
+    if(r.estado==="pendiente")return {texto:"Veo un cargo duplicado de $320 del 2 de octubre. ¿Confirmas que lo reembolse?",intencion:"cargo_duplicado",confianza:.91};
+  }
+  if((t.includes("devuel")||t.includes("reembols"))&&monto){
+    const r=h.usar("reembolso",{monto,motivo:"solicitud del cliente"});
+    if(r.estado==="bloqueado")return {texto:"Ese monto lo autoriza una persona del equipo. Te comunico ahora con un agente humano.",intencion:"reembolso",confianza:.88,escalar:r.motivo};
+    if(r.estado==="pendiente")return {texto:`Puedo reembolsar $${monto.toLocaleString("es-MX")}. ¿Confirmas?`,intencion:"reembolso",confianza:.88};
+  }
+  if(t.includes("borr")&&t.includes("dato")){
+    const r=h.usar("borrar_cliente",{cliente:"actual"});
+    return {texto:"La eliminación de datos la atiende el equipo de privacidad. Te comunico con ellos.",intencion:"derecho_cancelacion",confianza:.83,escalar:r.motivo||"derecho_arco"};
+  }
+  if(t.includes("direcci")||previo.includes("direcci")){
+    if(t.includes("envío")||t.includes("envio"))return {texto:"Puedes cambiar la dirección desde Mi cuenta → Direcciones.",intencion:"cambio_direccion",confianza:.62};
+    return {texto:"¿Quieres cambiar tu dirección de facturación o la de envío?",intencion:"ambigua",confianza:.41,aclaracion:true};
+  }
+  if(t.includes("vacacion")||t.includes("política")){
+    const r=h.usar("consultar_politica");
+    if(r.estado==="ok")return {texto:"Te corresponden 12 días al primer año, según la Política de vacaciones 2026.",intencion:"politica",confianza:.9,resuelto:true};
+  }
+  return {texto:"¿Me das un poco más de detalle para ayudarte?",intencion:"desconocida",confianza:.3,aclaracion:true};
+}
+function trasAccion(accion,res){
+  if(accion==="reembolso"&&res.estado==="ok")return `Listo. El reembolso de $${res.datos.monto.toLocaleString("es-MX")} (folio ${res.datos.folio}) se verá en ${res.datos.dias_habiles} días hábiles.`;
+  return res.estado==="ok"?"Listo, ya quedó.":"De acuerdo, no hago ningún cambio. ¿Te ayudo con algo más?";
+}
+
+/* ======================= Gateway: turno del usuario ======================= */
+function similitud(a,b){
+  const A=new Set(a.toLowerCase().split(/\W+/).filter(Boolean)),B=new Set(b.toLowerCase().split(/\W+/).filter(Boolean));
+  if(!A.size||!B.size)return 0;let i=0;A.forEach(x=>{if(B.has(x))i++;});return i/(A.size+B.size-i);
+}
+function procesar(texto){
+  const agenteId=$("#selAgente").value,uid=$("#inUsuario").value||"anonimo",canal=$("#selCanal").value;
+  const usuario=seudonimo(uid);const ficha=registry[agenteId];
+  addMsg("user",texto);
+
+  // 1. ¿El agente está registrado y activo?
+  if(!ficha||ficha.estado!=="activo"){
+    const motivo=!ficha?"no_registrado":`estado=${ficha.estado}`;
+    registrar({sesion:"—",usuario,agente:agenteId,ficha:null},"agente.no_autorizado","telemetria",{motivo,canal},"bloqueado");
+    addMsg("block",`403 · El agente ${agenteId} no puede atender usuarios (${motivo}).${!ficha?" Posible shadow AI.":""}`);
+    return;
+  }
+  // 2. Sesión
+  if(!sesion||sesion.cerrada||sesion.agente!==agenteId||sesion.usuario!==usuario){
+    if(sesion&&!sesion.cerrada)cerrar(null,true);
+    sesion={id:"s_"+Date.now().toString(36),agente:agenteId,usuario,inicio:Date.now(),historial:[],aclaracion:false,ultimo:"",resuelta:false,escalada:false,cerrada:false};
+    addMsg("sys",`— nueva sesión ${sesion.id} · usuario ${usuario} —`);
+  }
+  const ctx={sesion:sesion.id,usuario,agente:agenteId,ficha};
+  if(!sesion.historial.length)registrar(ctx,"sesion.inicio","telemetria",{canal});
+
+  // 3. Datos sensibles
+  const esc=escanear(texto,ficha.pii||{});
+  if(esc.tipos.length)registrar(ctx,"pii.detectada","telemetria",{tipos:esc.tipos,tratamiento:esc.bloqueado?"mensaje_rechazado":"enmascarado"},esc.bloqueado?"bloqueado":"intervenido");
+  if(esc.bloqueado){
+    addMsg("block","Mensaje rechazado: contiene una clave o contraseña. No se envió al modelo ni se guardó.");
+    addMsg("agent","Por seguridad no proceso mensajes con claves o contraseñas. Bórrala y vuelve a escribir tu mensaje.");
+    sesion.historial.push({rol:"sistema",texto:""});updateSes();return;
+  }
+  if(esc.tipos.length)addMsg("gw","El modelo recibe: "+esc.texto);
+
+  // 4. Fricción
+  const sim=sesion.ultimo?similitud(sesion.ultimo,esc.texto):0;
+  if(sesion.aclaracion||sim>=0.6)registrar(ctx,"reformulacion","telemetria",{causa:sesion.aclaracion?"aclaracion_solicitada":"mensaje_repetido",similitud:+sim.toFixed(2)},"intervenido");
+
+  registrar(ctx,"turno.usuario","contenido",{texto:esc.texto});
+
+  // 5. Agente (sus acciones pasan por la matriz de permisos)
+  const ui=[];const t0=performance.now();
+  const r=agente(esc.texto,sesion.historial,herramientas(ctx,ui));
+  const lat=Math.round(performance.now()-t0+350+Math.random()*900);
+  ui.forEach(([k,v])=>addMsg(k,v));
+  addMsg("agent",r.texto);
+  registrar(ctx,"turno.agente","contenido",{texto:r.texto});
+  registrar(ctx,"turno.completado","telemetria",{intencion:r.intencion,confianza:r.confianza,latencia_ms:lat,tokens:Math.round((texto.length+r.texto.length)/4)});
+  if(r.resuelto){sesion.resuelta=true;registrar(ctx,"tarea.resuelta","metrica",{intencion:r.intencion,via:"autonomo"});}
+  if(r.escalar){sesion.escalada=true;registrar(ctx,"escalamiento.humano","metrica",{motivo:r.escalar,intencion:r.intencion});addMsg("sys","→ conversación transferida a una persona");}
+  if(ui.pendiente)addCard(ui.pendiente);
+  sesion.historial.push({rol:"usuario",texto:esc.texto},{rol:"agente",texto:r.texto});
+  sesion.aclaracion=!!r.aclaracion;sesion.ultimo=esc.texto;updateSes();
+}
+
+function decidir(id,aprobada,card){
+  const p=pendientes[id];if(!p)return;delete pendientes[id];
+  card.querySelectorAll("button").forEach(b=>b.disabled=true);
+  addMsg("user",aprobada?"Sí, confírmalo":"No, cancélalo");
+  auditar(registrar(p.ctx,"decision.humana","telemetria",{id_accion:id,accion:p.accion,aprobada},"permitido"));
+  let res={estado:"cancelado",datos:{}};
+  if(aprobada){
+    res={estado:"ok",datos:BACKEND[p.accion](p.args)};
+    auditar(registrar(p.ctx,"accion.ejecutada","telemetria",{id_accion:id,accion:p.accion,args:p.args,resultado:res.datos},"permitido"));
+    if(sesion&&sesion.id===p.ctx.sesion)sesion.resuelta=true;
+    registrar(p.ctx,"tarea.resuelta","metrica",{via:"accion_aprobada",accion:p.accion});
+  }
+  const txt=trasAccion(p.accion,res);addMsg("agent",txt);registrar(p.ctx,"turno.agente","contenido",{texto:txt});
+}
+
+function cerrar(calif,silencioso){
+  if(!sesion||sesion.cerrada){if(!silencioso)toast("No hay una sesión abierta.");return;}
+  const ctx={sesion:sesion.id,usuario:sesion.usuario,agente:sesion.agente,ficha:registry[sesion.agente]};
+  const dur=Math.round((Date.now()-sesion.inicio)/1000);
+  if(!sesion.resuelta&&!sesion.escalada)registrar(ctx,"sesion.abandono","metrica",{duracion_s:dur});
+  if(calif)registrar(ctx,"retroalimentacion","metrica",{calificacion:calif});
+  registrar(ctx,"sesion.fin","telemetria",{duracion_s:dur,resuelta:sesion.resuelta,escalada:sesion.escalada});
+  sesion.cerrada=true;
+  if(!silencioso)addMsg("sys",`— sesión cerrada${calif?" · calificación "+calif:""} —`);
+  updateSes();
+}
+
+/* ======================= Acceso al contenido ======================= */
+let accesoConcedido=null;
+function solicitarAcceso(){
+  const rol=$("#selRol").value,just=$("#inJust").value.trim();
+  const ag=$("#selMetAg").value!=="todos"?$("#selMetAg").value:"AG-001";
+  const ficha=registry["AG-001"]||{};
+  const ok=(ficha.acceso_contenido||[]).includes(rol)&&just.length>=10;
+  const ev=registrar({sesion:"—",usuario:"staff:"+rol,agente:"AG-001",ficha},ok?"acceso.contenido":"acceso.denegado","telemetria",{rol,justificacion:just},ok?"permitido":"bloqueado");
+  auditar(ev);
+  if(ok){accesoConcedido=rol;toast(`Acceso concedido a ${rol}. Quedó en auditoría.`);}
+  else{accesoConcedido=null;toast(just.length<10?"Falta una justificación de al menos 10 caracteres.":`El rol ${rol} no puede leer conversaciones de este agente.`);}
+  renderEventos();
+}
+
+/* ======================= Métricas ======================= */
+const DEFS=[
+  ["Sesiones","Sesiones iniciadas."],
+  ["Tasa de resolución","Sesiones con tarea.resuelta ÷ sesiones."],
+  ["Tasa de reformulación","Sesiones con al menos una reformulación ÷ sesiones."],
+  ["Acciones aprobadas","Decisiones humanas aprobadas ÷ decisiones humanas."],
+  ["Escalamiento a humano","Sesiones con escalamiento.humano ÷ sesiones."],
+  ["Abandono","Sesiones con sesion.abandono ÷ sesiones."],
+  ["Intervenciones de política","PII detectada + acciones bloqueadas + agentes no autorizados."],
+  ["Latencia p50","Mediana de latencia del agente por turno."],
+];
+function metricas(ag){
+  const ev=eventos.filter(e=>e.capa!=="contenido"&&(ag==="todos"||e.agente===ag));
+  const ses=k=>new Set(ev.filter(e=>e.evento===k).map(e=>e.sesion)).size;
+  const n=ses("sesion.inicio");const pct=(a,b)=>b?Math.round(a/b*100)+"%":"—";
+  const dec=ev.filter(e=>e.evento==="decision.humana");
+  const lat=ev.filter(e=>e.evento==="turno.completado").map(e=>e.datos.latencia_ms).sort((a,b)=>a-b);
+  const interv=ev.filter(e=>["pii.detectada","accion.bloqueada","agente.no_autorizado"].includes(e.evento)).length;
+  return [n,pct(ses("tarea.resuelta"),n),pct(ses("reformulacion"),n),pct(dec.filter(e=>e.datos.aprobada).length,dec.length),
+    pct(ses("escalamiento.humano"),n),pct(ses("sesion.abandono"),n),interv,lat.length?lat[Math.floor(lat.length/2)]+" ms":"—"];
+}
+
+/* ======================= Render ======================= */
+function addMsg(tipo,texto){const d=document.createElement("div");d.className="msg "+tipo;d.textContent=texto;$("#chat").appendChild(d);$("#chat").scrollTop=1e9;}
+function addCard(p){
+  const c=document.createElement("div");c.className="card";
+  const t=document.createElement("div");t.innerHTML=`<b>Acción propuesta · requiere tu confirmación</b>`;
+  const d=document.createElement("div");d.className="mono";d.textContent=`${p.accion} ${JSON.stringify(p.args)}`;
+  const row=document.createElement("div");row.className="row";
+  const a=document.createElement("button");a.className="btn ok";a.type="button";a.textContent="Aprobar";
+  const r=document.createElement("button");r.className="btn";r.type="button";r.textContent="Rechazar";
+  a.onclick=()=>decidir(p.id,true,c);r.onclick=()=>decidir(p.id,false,c);
+  row.append(a,r);c.append(t,d,row);$("#chat").appendChild(c);$("#chat").scrollTop=1e9;
+}
+function updateSes(){$("#sesInfo").textContent=sesion&&!sesion.cerrada?`Sesión ${sesion.id} abierta`:"Sin sesión abierta";}
+const CAPA_P={contenido:"p-crit",telemetria:"p-info",metrica:"p-ok"};
+const POL_P={permitido:"p-ok",intervenido:"p-warn",bloqueado:"p-crit",na:"p-mute"};
+let selEv=null;
+function renderEventos(){
+  const capa=$("#selCapa").value;
+  $("#accessBox").hidden=!(capa==="contenido"&&!accesoConcedido);
+  let lista;
+  if(capa==="contenido"){lista=accesoConcedido?eventos.filter(e=>e.capa==="contenido"):[];}
+  else lista=eventos.filter(e=>capa==="todas"?e.capa!=="contenido":e.capa===capa);
+  lista=lista.slice(-300).reverse();
+  $("#evCount").textContent=capa==="contenido"&&!accesoConcedido?"Contenido restringido: solicita acceso.":`${lista.length} eventos`+(capa==="contenido"?` · acceso como ${accesoConcedido}`:"");
+  const body=$("#evBody");body.innerHTML="";
+  if(!lista.length){body.innerHTML=`<tr><td colspan="6" class="muted" style="text-align:center;padding:18px">${capa==="contenido"&&!accesoConcedido?"🔒 El texto de las conversaciones requiere rol autorizado y justificación.":"Aún no hay eventos. Escribe un mensaje en el chat o usa un ejemplo."}</td></tr>`;return;}
+  for(const e of lista){
+    const tr=document.createElement("tr");if(e.id_evento===selEv)tr.className="sel";
+    tr.innerHTML=`<td class="mono">${hora(e.ts)}</td><td class="mono"></td><td class="mono">${e.agente}</td><td><span class="pill ${CAPA_P[e.capa]}">${e.capa}</span></td><td><span class="pill ${POL_P[e.politica]||"p-mute"}">${e.politica}</span></td><td class="mono"></td>`;
+    tr.children[1].textContent=e.evento;
+    const det=JSON.stringify(e.datos);tr.children[5].textContent=det.length>60?det.slice(0,60)+"…":det;
+    tr.onclick=()=>{selEv=e.id_evento;$("#evJson").textContent=JSON.stringify(e,null,2);renderEventos();};
+    body.appendChild(tr);
+  }
+}
+function renderMetricas(){
+  const v=metricas($("#selMetAg").value);
+  $("#kpis").innerHTML=DEFS.map((d,i)=>`<div class="kpi"><b>${v[i]}</b><span>${d[0]}</span></div>`).join("");
+}
+function renderAuditoria(){
+  const body=$("#audBody");body.innerHTML="";
+  if(!auditoria.length){body.innerHTML=`<tr><td colspan="6" class="muted" style="text-align:center;padding:18px">Sin registros. Aparecen cuando el agente usa una herramienta, propone o ejecuta una acción, o alguien pide leer conversaciones.</td></tr>`;return;}
+  auditoria.slice().reverse().forEach((r,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="mono">${auditoria.length-i}</td><td class="mono">${hora(r.ts)}</td><td class="mono"></td><td class="mono"></td><td class="mono">${r.hash_previo}</td><td class="mono">${r.hash}</td>`;
+    tr.children[2].textContent=r.evento;const d=JSON.stringify(r.datos);tr.children[3].textContent=d.length>50?d.slice(0,50)+"…":d;
+    body.appendChild(tr);
+  });
+}
+function renderRegistry(){
+  $("#regText").value=JSON.stringify(registry,null,2);
+  const opts=[...Object.keys(registry).map(k=>[k,`${k} · ${registry[k].nombre}${registry[k].estado!=="activo"?" ("+registry[k].estado+")":""}`]),[AGENTE_NO_REGISTRADO,`${AGENTE_NO_REGISTRADO} · Chatbot de campañas (no registrado)`]];
+  const cur=$("#selAgente").value;
+  $("#selAgente").innerHTML=opts.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+  if(opts.some(o=>o[0]===cur))$("#selAgente").value=cur;
+  const curM=$("#selMetAg").value||"todos";
+  $("#selMetAg").innerHTML=`<option value="todos">Todos</option>`+Object.keys(registry).map(k=>`<option value="${k}">${k}</option>`).join("");
+  $("#selMetAg").value=[...$("#selMetAg").options].some(o=>o.value===curM)?curM:"todos";
+}
+
+/* ======================= Eventos de la UI ======================= */
+const EJEMPLOS=["¿Dónde está mi pedido 48213?","Me cobraron doble, mi tarjeta es 4111 1111 1111 1111","Quiero que me devuelvan $1,200 de la compra","cambiar dirección","la de envío del pedido que ya pagué!!","Mi integración falla, uso la key sk-live_9fA82kLmQpX7vRt2ZsY4wB","Quiero que borren mis datos","Mi correo es ana@cliente.com y mi cel 55 1234 5678"];
+$("#chips").innerHTML=EJEMPLOS.map((e,i)=>`<button class="chip" type="button" data-i="${i}"></button>`).join("");
+$("#chips").querySelectorAll("button").forEach(b=>{b.textContent=EJEMPLOS[+b.dataset.i];b.onclick=()=>procesar(EJEMPLOS[+b.dataset.i]);});
+$("#form").addEventListener("submit",e=>{e.preventDefault();const v=$("#inMsg").value.trim();if(!v)return;$("#inMsg").value="";procesar(v);});
+$("#btnFinPos").onclick=()=>cerrar("positiva");
+$("#btnFinNeg").onclick=()=>cerrar("negativa");
+$("#selCapa").onchange=renderEventos;
+$("#selMetAg").onchange=renderMetricas;
+$("#btnAcceso").onclick=solicitarAcceso;
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-selected",String(x===b)));
+  document.querySelectorAll("[data-panel]").forEach(p=>p.hidden=p.dataset.panel!==b.dataset.tab);
+});
+$("#btnRegSave").onclick=()=>{
+  try{const r=JSON.parse($("#regText").value);if(typeof r!=="object"||Array.isArray(r))throw new Error("debe ser un objeto con un agente por clave");
+    registry=r;LS.set("gob_registry",registry);renderRegistry();$("#regMsg").textContent="Guardado. Aplica desde el siguiente mensaje.";}
+  catch(e){$("#regMsg").textContent="JSON inválido: "+e.message;}
+};
+$("#btnRegReset").onclick=()=>{registry=structuredClone(REGISTRY_EJEMPLO);LS.set("gob_registry",registry);renderRegistry();$("#regMsg").textContent="Registry de ejemplo restaurado.";};
+$("#btnVerif").onclick=()=>{const v=verificar();$("#verifMsg").innerHTML=v.ok?`<span class="pill p-ok">Íntegra</span> ${v.n} registros`:`<span class="pill p-crit">Alterada</span> la cadena se rompe en el registro ${v.en}`;};
+$("#btnAlterar").onclick=()=>{
+  const i=auditoria.findIndex(r=>r.evento==="accion.ejecutada");const j=i>=0?i:auditoria.length-1;
+  if(j<0){toast("Primero genera algún registro de auditoría.");return;}
+  auditoria[j].datos={...auditoria[j].datos,alterado:true,nota:"monto cambiado a mano"};guardar();renderAuditoria();
+  toast(`Se modificó el registro ${j+1}. Ahora pulsa Verificar cadena.`);
+};
+$("#btnPurga").onclick=()=>{
+  const lim=new Date(Date.now()+61*864e5).toISOString();const antes=eventos.length;
+  const borr={contenido:0,telemetria:0,metrica:0};
+  eventos=eventos.filter(e=>{const x=e.expira&&e.expira<lim;if(x)borr[e.capa]++;return !x;});
+  guardar();renderEventos();renderMetricas();
+  toast(`Purga a +61 días: ${antes-eventos.length} eventos borrados (contenido ${borr.contenido}, telemetría ${borr.telemetria}). Las métricas se conservan.`);
+};
+$("#btnExport").onclick=()=>{
+  const blob=new Blob([JSON.stringify({exportado:new Date().toISOString(),registry,eventos,auditoria},null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="gobierno-agentes-"+new Date().toISOString().slice(0,10)+".json";a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+let resetArm=false;
+$("#btnReset").onclick=()=>{
+  if(!resetArm){resetArm=true;$("#btnReset").textContent="¿Seguro? Clic otra vez";setTimeout(()=>{resetArm=false;$("#btnReset").textContent="Borrar todo";},3000);return;}
+  eventos=[];auditoria=[];sesion=null;accesoConcedido=null;guardar();
+  $("#chat").innerHTML="";$("#evJson").textContent="Haz clic en un evento para ver el registro completo.";$("#verifMsg").textContent="";
+  resetArm=false;$("#btnReset").textContent="Borrar todo";
+  renderEventos();renderMetricas();renderAuditoria();updateSes();bienvenida();toast("Datos borrados.");
+};
+
+$("#defs").innerHTML=DEFS.map(d=>`<tr><td><b>${d[0]}</b></td><td>${d[1]}</td></tr>`).join("");
+function bienvenida(){addMsg("sys","Escribe como si fueras un cliente o usa los ejemplos de abajo. Cada mensaje pasa por la capa de gobierno antes de llegar al agente.");}
+renderRegistry();renderEventos();renderMetricas();renderAuditoria();updateSes();bienvenida();
+})();
+</script>
+</body>
+</html>
